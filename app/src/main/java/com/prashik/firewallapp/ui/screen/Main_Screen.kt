@@ -1,21 +1,20 @@
 package com.prashik.firewallapp.ui.screen
 
+import android.content.Intent
+import android.net.VpnService
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,14 +24,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.prashik.firewallapp.FirewallVpnService
 import com.prashik.firewallapp.R
-import com.prashik.firewallapp.ui.components.Custom_Bold_Text
 import com.prashik.firewallapp.ui.components.TrafficLog_Item
-import com.prashik.firewallapp.ui.components.VpnKeyAsTextIcon
 import com.prashik.firewallapp.ui.utils.Utils
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -42,50 +42,16 @@ fun Main_Screen(
 ) {
     var switchState by rememberSaveable { mutableStateOf(false) }
 
-    var showDialog by rememberSaveable { mutableStateOf(false) }
-
     val dummyTrafficLogs = Utils.dummyTrafficLogs
 
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title = {
-                Custom_Bold_Text(text = "Connection request")
-            },
-            text = {
-                Column {
-                    Text(
-                        text = "Firewall App wants to set up a VPN connection that allows it to monitor" +
-                                " network traffic. Only accept if you trust the source.",
-                        fontSize = 18.sp,
-                        color = Color.DarkGray
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    VpnKeyAsTextIcon()
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        switchState = true
-                        showDialog = false
-                    }
-                ) {
-                    Text(
-                        text = "Ok"
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showDialog = false }
-                ) {
-                    Text(
-                        text = "Cancel"
-                    )
-                }
-            }
-        )
+    val context = LocalContext.current
+
+    val vpnPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        val intent = Intent(context, FirewallVpnService::class.java)
+        ContextCompat.startForegroundService(context, intent)
+        switchState = true
     }
 
     LazyColumn(
@@ -110,10 +76,25 @@ fun Main_Screen(
                 Switch(
                     checked = switchState,
                     onCheckedChange = {
-                        if (switchState) {
-                            switchState = false
+                        if (!switchState) {
+                            val vpnIntent = VpnService.prepare(context)
+                            if (vpnIntent != null) {
+                                vpnPermissionLauncher.launch(vpnIntent)
+                            } else {
+                                ContextCompat.startForegroundService(
+                                    context,
+                                    Intent(context, FirewallVpnService::class.java)
+                                )
+                                switchState = true
+                            }
                         } else {
-                            showDialog = true
+                            val stopIntent = Intent(
+                                context,
+                                FirewallVpnService::class.java
+                            ).apply { action = "STOP_VPN_SERVICE" }
+
+                            context.startService(stopIntent)
+                            switchState = false
                         }
                     },
                     colors = SwitchDefaults.colors(
