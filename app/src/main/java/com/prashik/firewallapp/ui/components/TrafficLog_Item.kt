@@ -53,11 +53,11 @@ fun TrafficLog_Item(
             }
             Custom_Bold_Text(
                 unBoldText = "src  ",
-                text = trafficLogResponse.srcIp
+                text = "${trafficLogResponse.srcIp} (${trafficLogResponse.srcPort})"
             )
             Custom_Bold_Text(
                 unBoldText = "dst  ",
-                text = trafficLogResponse.dstIp
+                text = "${trafficLogResponse.dstIp} (${trafficLogResponse.dstPort})"
             )
         }
     }

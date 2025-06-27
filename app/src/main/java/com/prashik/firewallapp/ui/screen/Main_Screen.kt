@@ -33,7 +33,6 @@ import androidx.core.content.ContextCompat
 import com.prashik.firewallapp.FirewallVpnService
 import com.prashik.firewallapp.R
 import com.prashik.firewallapp.ui.components.TrafficLog_Item
-import com.prashik.firewallapp.ui.utils.Utils
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -42,7 +41,7 @@ fun Main_Screen(
 ) {
     var switchState by rememberSaveable { mutableStateOf(false) }
 
-    val dummyTrafficLogs = Utils.dummyTrafficLogs
+    val realTrafficLogs = FirewallVpnService.trafficLogs
 
     val context = LocalContext.current
 
@@ -70,7 +69,7 @@ fun Main_Screen(
                 Text(
                     text = "Firewall App",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
+                    fontSize = 22.sp,
                     color = if (switchState) colorResource(R.color.home_header_on_text) else Color.Black
                 )
                 Switch(
@@ -99,7 +98,9 @@ fun Main_Screen(
                     },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = colorResource(R.color.home_header_on_text),
-                        checkedTrackColor = colorResource(R.color.home_header_on_text).copy(alpha = 0.3f),
+                        checkedTrackColor = colorResource(R.color.home_header_on_text).copy(
+                            alpha = 0.3f
+                        ),
                         uncheckedThumbColor = Color.White,
                         uncheckedTrackColor = Color.Black.copy(alpha = 0.1f),
                         checkedBorderColor = Color.Transparent,
@@ -110,7 +111,7 @@ fun Main_Screen(
             }
         }
         if (switchState) {
-            items(items = dummyTrafficLogs) { trafficLog ->
+            items(items = realTrafficLogs.toList().reversed()) { trafficLog ->
                 TrafficLog_Item(
                     trafficLogResponse = trafficLog,
                     modifier = Modifier
