@@ -34,7 +34,8 @@ class FirewallVpnService : VpnService() {
     companion object {
         private var vpnInterface: ParcelFileDescriptor? = null
         var isRunning = AtomicBoolean(false)
-        val trafficLogs = mutableStateListOf<TrafficLogResponse>()
+        val allTrafficLogs = mutableStateListOf<TrafficLogResponse>()
+        val filteredTrafficLogs = mutableStateListOf<TrafficLogResponse>()
         private var logReadingJob: Job? = null
         const val CHANNEL_ID = "VPN_SERVICE_CHANNEL"
         const val NOTIFICATION_ID = 1
@@ -49,7 +50,8 @@ class FirewallVpnService : VpnService() {
             vpnInterface?.close()
             vpnInterface = null
             isRunning.set(false)
-            trafficLogs.clear()
+            allTrafficLogs.clear()
+            filteredTrafficLogs.clear()
             onDestroy()
             stopSelf()
             logReadingJob?.cancel()
@@ -87,12 +89,22 @@ class FirewallVpnService : VpnService() {
                     val packet = buffer.copyOf(length)
                     val trafficLog = parsePacket(packet)
 
-                    if (trafficLogs.size >= 50) {
-                        trafficLogs.removeFirstOrNull()
+                    if (trafficLog == null) continue
+
+                    if (
+                        !trafficLog.appName.contains("Unknown", ignoreCase = true)
+                    ) {
+                        if (filteredTrafficLogs.size >= 50) {
+                            filteredTrafficLogs.removeFirstOrNull()
+                        }
+                        filteredTrafficLogs.add(trafficLog)
                     }
 
-                    if (trafficLog != null && !trafficLogs.contains(trafficLog)) {
-                        trafficLogs.add(trafficLog)
+                    if (!allTrafficLogs.contains(trafficLog)) {
+                        if (allTrafficLogs.size >= 50) {
+                            allTrafficLogs.removeFirstOrNull()
+                        }
+                        allTrafficLogs.add(trafficLog)
                     }
                 }
             } catch (_: Exception) {
