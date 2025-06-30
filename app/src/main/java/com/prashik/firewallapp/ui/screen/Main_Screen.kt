@@ -1,5 +1,6 @@
 package com.prashik.firewallapp.ui.screen
 
+import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -69,9 +70,17 @@ fun Main_Screen(
     val vpnPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
-        val intent = Intent(context, FirewallVpnService::class.java)
-        ContextCompat.startForegroundService(context, intent)
-        switchState = true
+        when (it.resultCode) {
+            Activity.RESULT_OK -> {
+                val intent = Intent(context, FirewallVpnService::class.java)
+                ContextCompat.startForegroundService(context, intent)
+                switchState = true
+            }
+
+            Activity.RESULT_CANCELED -> {
+                switchState = false
+            }
+        }
     }
 
     LazyColumn(

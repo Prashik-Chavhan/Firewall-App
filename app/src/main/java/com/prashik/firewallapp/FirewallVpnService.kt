@@ -10,6 +10,8 @@ import android.net.ConnectivityManager
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.Process
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.mutableStateListOf
 import androidx.core.app.NotificationCompat
@@ -65,8 +67,11 @@ class FirewallVpnService : VpnService() {
             val builder = Builder()
                 .setSession(getString(R.string.app_name))
                 .addAddress("10.0.0.2", 32) // fake local vpn
-                .addDnsServer("8.8.8.8")
+                .addAddress("fd00:1:fd00:1:fd00:1:fd00:1", 128)
                 .addRoute("0.0.0.0", 0)
+                .addRoute("::", 0)
+                .addDnsServer("8.8.8.8")
+                .addDnsServer("2001:4860:4860::8888") // Google DNS IPv6
 
             vpnInterface = builder.establish()
 
@@ -206,11 +211,12 @@ class FirewallVpnService : VpnService() {
 
     private fun ipPortToLocalHexIPv6(ip: String, port: Int): String {
         val byteArray = InetAddress.getByName(ip).address
-        val hexIp = byteArray.joinToString("") { byte ->
-            (byte.toInt() and 0xFF).toString(16).padStart(2, '0')
-        }.padEnd(32, '0') // pad to 32 chars if needed
+        val hexIp = byteArray.joinToString("") {
+            "%02x".format(it)
+        }.padEnd(32, '0')
 
         val hexPort = port.toString(16).padStart(4, '0').uppercase()
+        Log.e("Firewall App", hexPort)
         return "$hexIp:$hexPort"
     }
 
@@ -225,23 +231,14 @@ class FirewallVpnService : VpnService() {
         val connectivityManager =
             getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        return try {
-            connectivityManager.getConnectionOwnerUid(
-                protocol,
-                InetSocketAddress(srcIp, srcPort),
-                InetSocketAddress(destIp, destPort)
-            )
-        } catch (_: Exception) {
-            try {
-                connectivityManager.getConnectionOwnerUid(
-                    protocol,
-                    InetSocketAddress(destIp, destPort),
-                    InetSocketAddress(srcIp, srcPort)
-                )
-            } catch (_: Exception) {
-                null
-            }
-        }
+        if (protocol != 6 && protocol != 17) return null
+        val uid = connectivityManager.getConnectionOwnerUid(
+            protocol,
+            InetSocketAddress(srcIp, srcPort),
+            InetSocketAddress(destIp, destPort)
+        )
+
+        return if (uid != Process.INVALID_UID) uid else -1
     }
 
     private fun ipPortToLocalHex(
@@ -255,6 +252,7 @@ class FirewallVpnService : VpnService() {
 
         val portHex = Integer.toHexString(sourcePort).padStart(4, '0').uppercase()
 
+        Log.e("Firewall App", portHex)
         return "$ipHex:$portHex"
     }
 
@@ -271,6 +269,7 @@ class FirewallVpnService : VpnService() {
             lines.forEach { line ->
                 if (line.contains(localHex)) {
                     val columns = line.trim().split(Regex("\\s+"))
+                    Log.d("Firewall Vpn", "${columns.getOrNull(7)?.toIntOrNull()}")
                     return columns.getOrNull(7)?.toIntOrNull()
                 }
             }
@@ -279,12 +278,19 @@ class FirewallVpnService : VpnService() {
     }
 
     private fun getAppNameFromUid(context: Context, uid: Int): String? {
-        val packageManager = context.packageManager
-        val packages = packageManager.getPackagesForUid(uid) ?: return null
         return try {
-            val appInfo = packageManager.getApplicationInfo(packages[0], 0)
-            packageManager.getApplicationLabel(appInfo).toString()
-        } catch (_: Exception) {
+            val pm = context.packageManager
+            val packageNames = pm.getPackagesForUid(uid)
+
+            if (packageNames != null && packageNames.isNotEmpty()) {
+                val appInfo = pm.getApplicationInfo(packageNames[0], 0)
+                pm.getApplicationLabel(appInfo).toString()
+            } else {
+                Log.e("Firewall App", "Failed for UID: $uid")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("FirewallVPN", "Error resolving UID $uid: ${e.message}")
             null
         }
     }
